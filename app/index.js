@@ -88,6 +88,7 @@ app.getLastFocusedWindow = () => {
 console.log('Disabling Chromium GPU blacklist');
 app.commandLine.appendSwitch('ignore-gpu-blacklist');
 
+//check for dev mode, override app version
 if (isDev) {
   //eslint-disable-next-line no-console
   console.log('running in dev mode');
@@ -103,6 +104,7 @@ if (isDev) {
   console.log('running in prod mode');
 }
 
+//locate the initial html url
 const url = 'file://' + resolve(isDev ? __dirname : app.getAppPath(), 'index.html');
 //eslint-disable-next-line no-console
 console.log('electron will open', url);
@@ -110,69 +112,6 @@ console.log('electron will open', url);
 app.on('ready', () =>
   installDevExtensions(isDev)
     .then(() => {
-      function createWindow(fn, options = {}) {
-        const cfg = plugins.getDecoratedConfig();
-
-        const winSet = config.getWin();
-        let [startX, startY] = winSet.position;
-
-        const [width, height] = options.size ? options.size : cfg.windowSize || winSet.size;
-        const {screen} = require('electron');
-
-        const winPos = options.position;
-
-        // Open the new window roughly the height of the header away from the
-        // previous window. This also ensures in multi monitor setups that the
-        // new terminal is on the correct screen.
-        const focusedWindow = BrowserWindow.getFocusedWindow() || app.getLastFocusedWindow();
-        // In case of options defaults position and size, we should ignore the focusedWindow.
-        if (winPos !== undefined) {
-          [startX, startY] = winPos;
-        } else if (focusedWindow) {
-          const points = focusedWindow.getPosition();
-          const currentScreen = screen.getDisplayNearestPoint({
-            x: points[0],
-            y: points[1]
-          });
-
-          const biggestX = points[0] + 100 + width - currentScreen.bounds.x;
-          const biggestY = points[1] + 100 + height - currentScreen.bounds.y;
-
-          if (biggestX > currentScreen.size.width) {
-            startX = 50;
-          } else {
-            startX = points[0] + 34;
-          }
-          if (biggestY > currentScreen.size.height) {
-            startY = 50;
-          } else {
-            startY = points[1] + 34;
-          }
-        }
-
-        if (!windowUtils.positionIsValid([startX, startY])) {
-          [startX, startY] = config.windowDefaults.windowPosition;
-        }
-
-        const hwin = new Window({width, height, x: startX, y: startY}, cfg, fn);
-        windowSet.add(hwin);
-        hwin.loadURL(url);
-
-        // the window can be closed by the browser process itself
-        hwin.on('close', () => {
-          hwin.clean();
-          windowSet.delete(hwin);
-        });
-
-        hwin.on('closed', () => {
-          if (process.platform !== 'darwin' && windowSet.size === 0) {
-            app.quit();
-          }
-        });
-
-        return hwin;
-      }
-
       // when opening create a new window
       createWindow();
 
@@ -188,6 +127,7 @@ app.on('ready', () =>
         }
       });
 
+      //build plugins menu
       const makeMenu = () => {
         const menu = plugins.decorateMenu(AppMenu.createMenu(createWindow, plugins.getLoadedPluginVersions));
 
@@ -207,6 +147,7 @@ app.on('ready', () =>
         Menu.setApplicationMenu(AppMenu.buildMenu(menu));
       };
 
+      //initialize listeners and generate the plugin menu
       plugins.onApp(app);
       makeMenu();
       plugins.subscribe(plugins.onApp.bind(undefined, app));
@@ -231,6 +172,7 @@ app.on('ready', () =>
     })
 );
 
+//if the app catches the open file event, send that event along through rpc
 app.on('open-file', (event, path) => {
   const lastWindow = app.getLastFocusedWindow();
   const callback = win => win.rpc.emit('open file', {path});
@@ -245,6 +187,7 @@ app.on('open-file', (event, path) => {
   }
 });
 
+//if the app catches the open url event, send that event along through rpc
 app.on('open-url', (event, sshUrl) => {
   const lastWindow = app.getLastFocusedWindow();
   const callback = win => win.rpc.emit('open ssh', sshUrl);
@@ -270,4 +213,67 @@ function installDevExtensions(isDev_) {
   const forceDownload = Boolean(process.env.UPGRADE_EXTENSIONS);
 
   return Promise.all(extensions.map(name => installer.default(installer[name], forceDownload)));
+}
+
+function createWindow(fn, options = {}) {
+  const cfg = plugins.getDecoratedConfig();
+
+  const winSet = config.getWin();
+  let [startX, startY] = winSet.position;
+
+  const [width, height] = options.size ? options.size : cfg.windowSize || winSet.size;
+  const {screen} = require('electron');
+
+  const winPos = options.position;
+
+  // Open the new window roughly the height of the header away from the
+  // previous window. This also ensures in multi monitor setups that the
+  // new terminal is on the correct screen.
+  const focusedWindow = BrowserWindow.getFocusedWindow() || app.getLastFocusedWindow();
+  // In case of options defaults position and size, we should ignore the focusedWindow.
+  if (winPos !== undefined) {
+    [startX, startY] = winPos;
+  } else if (focusedWindow) {
+    const points = focusedWindow.getPosition();
+    const currentScreen = screen.getDisplayNearestPoint({
+      x: points[0],
+      y: points[1]
+    });
+
+    const biggestX = points[0] + 100 + width - currentScreen.bounds.x;
+    const biggestY = points[1] + 100 + height - currentScreen.bounds.y;
+
+    if (biggestX > currentScreen.size.width) {
+      startX = 50;
+    } else {
+      startX = points[0] + 34;
+    }
+    if (biggestY > currentScreen.size.height) {
+      startY = 50;
+    } else {
+      startY = points[1] + 34;
+    }
+  }
+
+  if (!windowUtils.positionIsValid([startX, startY])) {
+    [startX, startY] = config.windowDefaults.windowPosition;
+  }
+
+  const hwin = new Window({width, height, x: startX, y: startY}, cfg, fn);
+  windowSet.add(hwin);
+  hwin.loadURL(url);
+
+  // the window can be closed by the browser process itself
+  hwin.on('close', () => {
+    hwin.clean();
+    windowSet.delete(hwin);
+  });
+
+  hwin.on('closed', () => {
+    if (process.platform !== 'darwin' && windowSet.size === 0) {
+      app.quit();
+    }
+  });
+
+  return hwin;
 }
