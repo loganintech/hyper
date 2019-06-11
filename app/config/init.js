@@ -32,8 +32,7 @@ const _init = function(cfg) {
       notify('Error reading configuration: `config` key is missing');
       return cfg.defaultCfg;
     }
-    _cfg.config.fontFamily += ', monospace'
-    console.log(_cfg);
+    _cfg.config.fontFamily += ', monospace';
     // Merging platform specific keymaps with user defined keymaps
     _cfg.keymaps = mapKeys(Object.assign({}, cfg.defaultCfg.keymaps, _cfg.keymaps));
     // Ignore undefined values in plugin and localPlugins array Issue #1862
